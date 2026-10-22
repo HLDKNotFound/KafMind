@@ -153,3 +153,72 @@ def build_user_filter(
     if extra_conditions:
         must_conditions.extend(extra_conditions)
     return models.Filter(must=must_conditions)
+
+
+async def search_documents(
+    user_id: Union[str, uuid.UUID],
+    query_text: str,
+    selected_file_ids: Optional[List[Union[str, uuid.UUID]]] = None,
+    limit: int = 5,
+    score_threshold: Optional[float] = None,
+    client: Optional[AsyncQdrantClient] = None,
+) -> List[dict]:
+    """Embed query and search Qdrant for top matching chunks with strict user_id multi-tenant isolation."""
+    if client is None:
+        client = get_qdrant_client()
+
+    collection_name = settings.QDRANT_COLLECTION_NAME
+    exists = await client.collection_exists(collection_name=collection_name)
+    if not exists:
+        return []
+
+    # Compute dense embeddings off-thread
+    query_embeddings = await asyncio.to_thread(generate_embeddings, [query_text])
+    if not query_embeddings:
+        return []
+    query_vector = query_embeddings[0]
+
+    # Build multi-tenant filter with optional file_id narrowing
+    extra_conditions: List[models.FieldCondition] = []
+    if selected_file_ids:
+        cleaned_ids = [str(fid) for fid in selected_file_ids if fid]
+        if len(cleaned_ids) == 1:
+            extra_conditions.append(
+                models.FieldCondition(
+                    key="file_id",
+                    match=models.MatchValue(value=cleaned_ids[0]),
+                )
+            )
+        elif len(cleaned_ids) > 1:
+            extra_conditions.append(
+                models.FieldCondition(
+                    key="file_id",
+                    match=models.MatchAny(any=cleaned_ids),
+                )
+            )
+
+    user_filter = build_user_filter(user_id=user_id, extra_conditions=extra_conditions)
+
+    res = await client.query_points(
+        collection_name=collection_name,
+        query=query_vector,
+        query_filter=user_filter,
+        limit=limit,
+        score_threshold=score_threshold,
+    )
+
+    results: List[dict] = []
+    for point in res.points:
+        payload = point.payload or {}
+        results.append(
+            {
+                "id": str(point.id),
+                "score": float(point.score),
+                "text": payload.get("text", ""),
+                "filename": payload.get("filename", ""),
+                "file_id": payload.get("file_id", ""),
+                "chunk_index": payload.get("chunk_index", 0),
+            }
+        )
+    return results
+
