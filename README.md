@@ -96,51 +96,89 @@ flowchart TD
 ## ⚡ Quick-Start Instructions
 
 ### Prerequisites
-- Python 3.12+ (or Conda environment `ml-env`)
-- Node.js 20+ & npm / pnpm
-- Docker & Docker Compose (for PostgreSQL, Redis, Kafka, and Qdrant)
+- Docker & Docker Compose (v2.20+)
+- *Optional for local dev:* Python 3.12+, Node.js 20+, Conda (`ml-env`)
 
-### 1. Environment Configuration
-Copy the sample environment file and configure your API keys:
-```bash
-cp .env.example .env
-```
-Ensure `TOKEN_HARBOR_API_KEY` is provided in `.env`.
+---
 
-### 2. Infrastructure Services (Docker)
-Start the supporting services (PostgreSQL, Redis, Qdrant, Apache Kafka):
-```bash
-docker compose up -d
-```
+### Option A: Complete Production Stack via Docker Compose (Recommended)
+Run the entire platform (PostgreSQL, Redis, Qdrant, Apache Kafka, FastAPI Backend, Ingestion Worker, and Frontend) in a single command:
 
-### 3. Backend Setup
-Activate your Python environment and start the FastAPI service:
+1. **Configure Environment:**
+   ```bash
+   cp .env.example .env
+   # Edit .env and supply your TOKEN_HARBOR_API_KEY
+   ```
+
+2. **Launch All Services:**
+   ```bash
+   docker compose up --build -d
+   ```
+
+3. **Access Services:**
+   - **Frontend UI:** [http://localhost:3000](http://localhost:3000)
+   - **FastAPI Documentation:** [http://localhost:8000/docs](http://localhost:8000/docs)
+   - **API Health Check:** [http://localhost:8000/api/v1/health](http://localhost:8000/api/v1/health)
+   - **Qdrant Dashboard:** [http://localhost:6333/dashboard](http://localhost:6333/dashboard)
+
+---
+
+### Option B: Local Development Setup
+
+1. **Environment Configuration:**
+   ```bash
+   cp .env.example .env
+   ```
+
+2. **Start Infrastructure Services:**
+   ```bash
+   docker compose up postgres redis qdrant kafka -d
+   ```
+
+3. **Backend API & Migrations:**
+   ```bash
+   conda activate ml-env
+   cd backend
+   pip install -r requirements.txt
+   alembic upgrade head
+   uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+   ```
+
+4. **Kafka Ingestion Worker:**
+   In a separate terminal:
+   ```bash
+   conda activate ml-env
+   cd backend
+   python -m app.workers.ingestion_worker
+   ```
+
+5. **Frontend Development Server:**
+   ```bash
+   cd frontend
+   npm install
+   npm run dev
+   ```
+   Open [http://localhost:5173](http://localhost:5173).
+
+---
+
+## 🧪 Verification & Automated Testing
+
+### Backend Test Suite
+The backend features an asynchronous test suite covering infrastructure health, authentication, asynchronous ingestion, LangGraph agent routing, SSE streaming, and multi-tenant end-to-end flows:
 ```bash
-conda activate ml-env
 cd backend
-pip install -r requirements.txt
-alembic upgrade head
-uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+pytest -v
 ```
 
-In a separate terminal, launch the Kafka ingestion consumer:
-```bash
-conda activate ml-env
-cd backend
-python -m app.workers.kafka_consumer
-```
-
-### 4. Frontend Setup
-Install dependencies and run the Vite development server:
+### Frontend Test Suite
+The frontend includes unit and component tests validating routing, authentication, state management, and SSE chat:
 ```bash
 cd frontend
-npm install
-npm run dev
+npm run test
 ```
-Open [http://localhost:5173](http://localhost:5173) in your browser.
 
 ---
 
 ## 🔒 Stage-Gate Protocol
 Development follows strict stage gates outlined in [AGENTS.md](AGENTS.md). Each stage is completely self-contained and strictly verified before moving to the next.
-# KafMind
