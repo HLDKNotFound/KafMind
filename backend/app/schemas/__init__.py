@@ -5,6 +5,13 @@ from app.schemas.auth import (
     RefreshTokenRequest,
     TokenResponse,
 )
+from app.schemas.chat import (
+    ChatMessageResponse,
+    ChatSessionCreate,
+    ChatSessionResponse,
+    ChatSessionUpdate,
+    ChatStreamRequest,
+)
 from app.schemas.file import (
     FileDeleteResponse,
     FileResponse,
@@ -32,4 +39,9 @@ __all__ = [
     "FileUploadAcceptedResponse",
     "FileDeleteResponse",
     "FileStatusEvent",
+    "ChatSessionCreate",
+    "ChatSessionUpdate",
+    "ChatSessionResponse",
+    "ChatMessageResponse",
+    "ChatStreamRequest",
 ]

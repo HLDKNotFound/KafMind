@@ -18,6 +18,7 @@ if str(BASE_DIR) not in sys.path:
 from app.core.config import get_settings
 from app.core.database import Base
 # Import all models so Base.metadata knows about them
+import app.models.chat  # noqa: F401
 import app.models.file  # noqa: F401
 import app.models.user  # noqa: F401
 
