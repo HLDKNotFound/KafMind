@@ -55,10 +55,14 @@ async def router_node(state: AgentState) -> Dict[str, Any]:
     query = get_latest_user_query(messages)
     selected_file_ids = state.get("selected_file_ids") or []
 
-    # Fast-path for clear greetings when no specific files are explicitly requested
+    # Fast-path 1: If specific files are explicitly attached, immediately retrieve without calling LLM
+    if selected_file_ids:
+        return {"router_decision": "retrieve"}
+
+    # Fast-path 2: for clear greetings when no specific files are explicitly requested
     normalized_query = query.strip().lower()
     chitchat_greetings = {"hi", "hello", "hey", "good morning", "good evening", "who are you", "who are you?", "ping"}
-    if normalized_query in chitchat_greetings and not selected_file_ids:
+    if normalized_query in chitchat_greetings:
         return {"router_decision": "direct"}
 
     # Use Token Harbor LLM to classify query intent

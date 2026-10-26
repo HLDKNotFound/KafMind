@@ -126,20 +126,50 @@ async def upload_file(
             detail=f"Unsupported file format '{ext}'. Allowed formats: PDF, DOCX, TXT, MD",
         )
 
-    # 2. Read file content
-    content = await file.read()
-    if not content:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Uploaded file is empty",
-        )
-
-    # 3. Save to disk asynchronously
+    # 2. Prepare upload destination
     file_id = uuid.uuid4()
     upload_dir = Path(settings.UPLOAD_DIR) / str(current_user.id)
     upload_dir.mkdir(parents=True, exist_ok=True)
     destination = upload_dir / f"{file_id}_{file.filename}"
-    await asyncio.to_thread(destination.write_bytes, content)
+
+    # 3. Stream file to disk with chunked reading and size validation to prevent OOM
+    max_size_bytes = settings.MAX_UPLOAD_SIZE_MB * 1024 * 1024
+    total_size = 0
+    chunk_size = 1024 * 1024  # 1MB chunk
+
+    try:
+        with open(destination, "wb") as f:
+            while True:
+                chunk = await file.read(chunk_size)
+                if not chunk:
+                    break
+                total_size += len(chunk)
+                if total_size > max_size_bytes:
+                    f.close()
+                    if destination.is_file():
+                        destination.unlink()
+                    raise HTTPException(
+                        status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+                        detail=f"File size exceeds maximum allowed limit of {settings.MAX_UPLOAD_SIZE_MB}MB",
+                    )
+                f.write(chunk)
+    except HTTPException:
+        raise
+    except Exception as e:
+        if destination.is_file():
+            destination.unlink()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to store file: {str(e)}",
+        )
+
+    if total_size == 0:
+        if destination.is_file():
+            destination.unlink()
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Uploaded file is empty",
+        )
 
     # 4. Create PENDING DB record
     doc_file = DocumentFile(
@@ -147,11 +177,12 @@ async def upload_file(
         user_id=current_user.id,
         filename=file.filename or "unknown",
         file_path=str(destination.resolve()),
-        file_size=len(content),
+        file_size=total_size,
         mime_type=file.content_type or "application/octet-stream",
         status=FileStatus.PENDING.value,
         chunk_count=0,
     )
+
     db.add(doc_file)
     await db.commit()
     await db.refresh(doc_file)

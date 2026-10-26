@@ -245,14 +245,22 @@ async def stream_chat_session(
         .order_by(ChatMessage.created_at.asc())
     )
     result = await db.execute(query)
-    db_messages = result.scalars().all()
+    db_messages = list(result.scalars().all())
+    # 3. Retrieve chronological message history with a sliding window (last 12 messages) to prevent context overflow
+    MAX_HISTORY_MESSAGES = 12
+    recent_db_messages = (
+        db_messages[-MAX_HISTORY_MESSAGES:]
+        if len(db_messages) > MAX_HISTORY_MESSAGES
+        else db_messages
+    )
 
     langchain_messages = []
-    for msg in db_messages:
+    for msg in recent_db_messages:
         if msg.role == "user":
             langchain_messages.append(HumanMessage(content=msg.content))
         elif msg.role == "assistant":
             langchain_messages.append(AIMessage(content=msg.content))
+
 
     async def event_generator():
         accumulated_tokens: List[str] = []

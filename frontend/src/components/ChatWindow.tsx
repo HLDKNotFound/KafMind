@@ -17,6 +17,10 @@ import {
   FileCheck,
   RotateCcw,
   Zap,
+  Download,
+  Eye,
+  X,
+  FileText,
 } from 'lucide-react'
 import { ChatMessage, SourceCitation, AgentStepEvent } from '../types'
 import { useAuthStore } from '../store/authStore'
@@ -58,6 +62,33 @@ export const ChatWindow: React.FC<ChatWindowProps> = ({
   const [currentStep, setCurrentStep] = useState<AgentStepEvent | null>(null)
   const [copiedCodeId, setCopiedCodeId] = useState<string | null>(null)
   const [expandedSources, setExpandedSources] = useState<Record<string, boolean>>({})
+  const [activeSourcePreview, setActiveSourcePreview] = useState<SourceCitation | null>(null)
+  const [copiedExcerpt, setCopiedExcerpt] = useState(false)
+
+  const handleExportChat = () => {
+    if (localMessages.length === 0) return
+    const title = sessionTitle || 'Conversation'
+    let md = `# ${title}\n\n*Exported from KafMind on ${new Date().toLocaleString()}*\n\n---\n\n`
+    for (const msg of localMessages) {
+      const role = msg.role === 'user' ? '👤 **User**' : '🧠 **KafMind**'
+      md += `### ${role}\n\n${msg.content}\n\n`
+      if (msg.sources && msg.sources.length > 0) {
+        md += `**Sources:**\n`
+        for (const src of msg.sources) {
+          md += `- [${src.filename} (chunk #${src.chunk_index})](Match: ${(src.score * 100).toFixed(0)}%)\n`
+        }
+        md += `\n`
+      }
+      md += `---\n\n`
+    }
+    const blob = new Blob([md], { type: 'text/markdown;charset=utf-8' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `${title.toLowerCase().replace(/[^a-z0-9]+/g, '-')}-export.md`
+    a.click()
+    URL.revokeObjectURL(url)
+  }
 
   const abortControllerRef = useRef<AbortController | null>(null)
   const messagesEndRef = useRef<HTMLDivElement>(null)
@@ -268,13 +299,26 @@ export const ChatWindow: React.FC<ChatWindowProps> = ({
           )}
         </div>
 
-        <button
-          onClick={onOpenFileManager}
-          className="text-xs text-slate-300 hover:text-white bg-surface-850 hover:bg-surface-800 border border-slate-750 px-3 py-1.5 rounded-lg flex items-center gap-1.5 transition-colors cursor-pointer"
-        >
-          <BookOpen className="w-3.5 h-3.5 text-brand-400" />
-          <span>Scope Files</span>
-        </button>
+        <div className="flex items-center gap-2">
+          {localMessages.length > 0 && (
+            <button
+              onClick={handleExportChat}
+              className="text-xs text-slate-300 hover:text-white bg-surface-850 hover:bg-surface-800 border border-slate-750 px-3 py-1.5 rounded-lg flex items-center gap-1.5 transition-colors cursor-pointer"
+              title="Export conversation to Markdown"
+            >
+              <Download className="w-3.5 h-3.5 text-brand-400" />
+              <span className="hidden sm:inline">Export</span>
+            </button>
+          )}
+
+          <button
+            onClick={onOpenFileManager}
+            className="text-xs text-slate-300 hover:text-white bg-surface-850 hover:bg-surface-800 border border-slate-750 px-3 py-1.5 rounded-lg flex items-center gap-1.5 transition-colors cursor-pointer"
+          >
+            <BookOpen className="w-3.5 h-3.5 text-brand-400" />
+            <span>Scope Files</span>
+          </button>
+        </div>
       </div>
 
       {/* Messages Scroll Container */}
@@ -405,15 +449,21 @@ export const ChatWindow: React.FC<ChatWindowProps> = ({
                               {msg.sources.map((src, idx) => (
                                 <div
                                   key={idx}
-                                  className="p-3 rounded-xl bg-surface-950/70 border border-slate-800 text-xs text-slate-300"
+                                  onClick={() => setActiveSourcePreview(src)}
+                                  className="p-3 rounded-xl bg-surface-950/70 hover:bg-surface-850/80 border border-slate-800 hover:border-brand-500/40 text-xs text-slate-300 transition-all cursor-pointer group"
+                                  title="Click to view full chunk excerpt"
                                 >
                                   <div className="flex items-center justify-between mb-1 text-[11px]">
-                                    <span className="font-semibold text-brand-300 truncate max-w-[200px]">
+                                    <span className="font-semibold text-brand-300 group-hover:text-brand-200 truncate max-w-[200px] flex items-center gap-1">
+                                      <FileText className="w-3 h-3 text-brand-400" />
                                       {src.filename} [chunk #{src.chunk_index}]
                                     </span>
-                                    <span className="text-slate-400 font-mono">
-                                      Match: {(src.score * 100).toFixed(0)}%
-                                    </span>
+                                    <div className="flex items-center gap-2">
+                                      <span className="text-slate-400 font-mono">
+                                        Match: {(src.score * 100).toFixed(0)}%
+                                      </span>
+                                      <Eye className="w-3 h-3 text-slate-500 group-hover:text-brand-400 transition-colors" />
+                                    </div>
                                   </div>
                                   <p className="text-slate-400 italic line-clamp-3 bg-surface-900/50 p-2 rounded-lg border border-slate-800/50 mt-1">
                                     "{src.text}"
@@ -527,6 +577,67 @@ export const ChatWindow: React.FC<ChatWindowProps> = ({
           </div>
         </form>
       </div>
+
+      {/* Citation Chunk Preview Modal */}
+      {activeSourcePreview && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in">
+          <div className="bg-surface-900 border border-slate-800 rounded-2xl w-full max-w-lg p-6 shadow-2xl space-y-4">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-800">
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-lg bg-brand-500/10 border border-brand-500/20 flex items-center justify-center text-brand-400">
+                  <FileText className="w-4 h-4" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-semibold text-white truncate max-w-[280px]">
+                    {activeSourcePreview.filename}
+                  </h3>
+                  <p className="text-[11px] text-slate-400 font-mono">
+                    Chunk #{activeSourcePreview.chunk_index} • Match: {(activeSourcePreview.score * 100).toFixed(0)}%
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setActiveSourcePreview(null)}
+                className="p-1 rounded-lg text-slate-400 hover:text-white hover:bg-surface-800 transition-colors cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="bg-surface-950 p-4 rounded-xl border border-slate-800/80 max-h-72 overflow-y-auto text-xs text-slate-200 leading-relaxed font-sans whitespace-pre-wrap selection:bg-brand-500/30">
+              {activeSourcePreview.text}
+            </div>
+
+            <div className="flex items-center justify-between pt-2">
+              <span className="text-[11px] text-slate-400">
+                Vector source indexed via FastEmbed & Qdrant
+              </span>
+              <button
+                type="button"
+                onClick={() => {
+                  navigator.clipboard.writeText(activeSourcePreview.text)
+                  setCopiedExcerpt(true)
+                  setTimeout(() => setCopiedExcerpt(false), 2000)
+                }}
+                className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-slate-200 bg-surface-800 hover:bg-surface-750 border border-slate-700 rounded-lg transition-colors cursor-pointer"
+              >
+                {copiedExcerpt ? (
+                  <>
+                    <Check className="w-3.5 h-3.5 text-green-400" />
+                    <span>Copied!</span>
+                  </>
+                ) : (
+                  <>
+                    <Copy className="w-3.5 h-3.5 text-slate-400" />
+                    <span>Copy Excerpt</span>
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

@@ -11,12 +11,24 @@ from app.core.config import get_settings
 
 settings = get_settings()
 
+is_sqlite = settings.DATABASE_URL.startswith("sqlite")
+engine_kwargs = {
+    "echo": False,
+    "pool_pre_ping": True,
+    "future": True,
+}
+if not is_sqlite:
+    engine_kwargs.update({
+        "pool_size": 10,
+        "max_overflow": 20,
+        "pool_recycle": 1800,
+    })
+
 engine = create_async_engine(
     settings.DATABASE_URL,
-    echo=False,
-    pool_pre_ping=True,
-    future=True,
+    **engine_kwargs,
 )
+
 
 async_session_maker = async_sessionmaker(
     bind=engine,

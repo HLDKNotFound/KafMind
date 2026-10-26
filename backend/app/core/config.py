@@ -46,6 +46,7 @@ class Settings(BaseSettings):
     REFRESH_TOKEN_EXPIRE_DAYS: int = 7
     CORS_ORIGINS: List[str] = ["http://localhost:5173", "http://localhost:3000"]
     UPLOAD_DIR: str = "uploads"
+    MAX_UPLOAD_SIZE_MB: int = 50
 
     # 3. Core Database & Cache (PostgreSQL + Redis)
     POSTGRES_USER: str = "kafmind_user"
@@ -91,6 +92,17 @@ class Settings(BaseSettings):
                     pass
             return [v.strip() for v in value.split(",") if v.strip()]
         return value
+
+    @field_validator("SECRET_KEY")
+    @classmethod
+    def validate_secret_key(cls, value: str) -> str:
+        if value == "super_secret_jwt_key_change_in_production_987654321":
+            import logging
+            logging.getLogger("uvicorn.error").warning(
+                "[Security Alert] Using default SECRET_KEY! Change this in production environment."
+            )
+        return value
+
 
 
 @lru_cache()

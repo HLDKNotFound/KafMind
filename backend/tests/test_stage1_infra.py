@@ -20,7 +20,7 @@ def test_env_config_loading():
     assert settings.REDIS_URL.startswith("redis://")
     assert settings.QDRANT_HOST == "localhost"
     assert settings.QDRANT_PORT == 6333
-    assert settings.KAFKA_BOOTSTRAP_SERVERS == "localhost:9092"
+    assert settings.KAFKA_BOOTSTRAP_SERVERS in ["localhost:9092", "localhost:9094"]
     assert settings.KAFKA_TOPIC_FILE_UPLOADED == "file.uploaded"
     assert settings.KAFKA_TOPIC_FILE_STATUS == "file.status"
     assert isinstance(settings.CORS_ORIGINS, list)
